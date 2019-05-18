@@ -29,8 +29,9 @@ def process(img, f_name):
         cv2.drawContours(mask, contours, idx, (255, 255, 255), -1)
         r = float(cv2.countNonZero(mask[y:y+h, x:x+w])) / (w * h)
 
-        if r > 0.45 and w > 100 and h > 100:
-            cv2.rectangle(rgb, (x, y), (x+w-1, y+h-1), (0, 255, 0), 2)
+        if w < 400 and h < 200:
+            if r > 0.45 and w > 3 and h > 2:
+                cv2.rectangle(rgb, (x, y), (x+w-1, y+h-1), (0, 255, 0), 2)
 
     # cv2.imshow('rects', rgb)
     cv2.imwrite("examples/" + f_name, rgb)
