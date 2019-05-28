@@ -42,30 +42,50 @@ def find_lines_mask(img):
 
     blur_grad = cv2.medianBlur(grad, ksize_median_blur)
     kernel = np.ones(kernel_size_dilate, np.uint8)
-    show_with_resize("grad", grad, 450)
+    # show_with_resize("grad", grad, 450)
 
     # erode = cv2.erode(blur_grad, kernel, iterations=3)
     dilate = cv2.dilate(blur_grad, kernel, iterations=5)
     # show_with_resize("erode", erode, 450)
-    show_with_resize("dilate", dilate, 450)
+    # show_with_resize("dilate", dilate, 450)
+
     mask = np.zeros(dilate.shape, dtype=np.uint8)
     lines_sum = np.sum(dilate, axis=1)
     lines_sum_mean = np.mean(lines_sum)
     lines_sum_med = np.median(lines_sum)
     print("median: {}, mean: {}".format(lines_sum_mean, lines_sum_med))
     for i, line_sum in enumerate(lines_sum):
-        if line_sum > lines_sum_med * 1.2:
-            mask[i, :] = 255
+        line = dilate[i]
+        line_mean = np.mean(line)
+        line_med = np.median(line)
+        for j, pixel in enumerate(line):
+            if pixel > line_med * 1.6 and line_sum > lines_sum_med:
+                mask[i, j] = 255
+    blur_mask = cv2.GaussianBlur(mask, (3, 1), 0)
+    dilate_mask = cv2.dilate(mask, np.ones((1, 3), np.uint8), iterations=3)
 
     show_with_resize("mask", mask, 450)
-    return mask
+    # show_with_resize("blur_mask", blur_mask, 450)
+    show_with_resize("dilate_mask", dilate_mask, 450)
+    return dilate_mask
+
+
+def draw_word_rectangles(img, mask):
+    im2, contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        if 75 < w < 500 and 30 < h < 100:
+            cv2.rectangle(img, (x, y), (x + w - 1, y + h - 1), (0, 255, 0), 2)
+    show_with_resize("img contours", img, 450)
+    return img
 
 
 def process(img):
     mask = find_lines_mask(img)
     res = cv2.bitwise_and(img, img, mask=mask)
     show_with_resize("res", res, 450)
-
+    marked_words = draw_word_rectangles(img, mask)
+    show_with_resize("marked_words", marked_words, 450)
     cv2.waitKey(0)
 
 
@@ -75,6 +95,7 @@ def main(path):
         if f_name[-3:] == "jpg":
             img = cv2.imread(os.path.join(path, f_name))
             process(img)
+
         # print(os.path.exists())
 
 
