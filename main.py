@@ -36,7 +36,7 @@ def find_lines_mask(img):
     kernel_size_dilate = (5, 5)
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    show_with_resize("normal", gray, 450)
+    # show_with_resize("normal", gray, 450)
 
     grad = apply_sobel(gray)
 
@@ -64,9 +64,9 @@ def find_lines_mask(img):
     blur_mask = cv2.GaussianBlur(mask, (3, 1), 0)
     dilate_mask = cv2.dilate(mask, np.ones((1, 3), np.uint8), iterations=3)
 
-    show_with_resize("mask", mask, 450)
+    # show_with_resize("mask", mask, 450)
     # show_with_resize("blur_mask", blur_mask, 450)
-    show_with_resize("dilate_mask", dilate_mask, 450)
+    # show_with_resize("dilate_mask", dilate_mask, 450)
     return dilate_mask
 
 
@@ -76,17 +76,56 @@ def draw_word_rectangles(img, mask):
         x, y, w, h = cv2.boundingRect(contour)
         if 75 < w < 500 and 30 < h < 100:
             cv2.rectangle(img, (x, y), (x + w - 1, y + h - 1), (0, 255, 0), 2)
-    show_with_resize("img contours", img, 450)
+    # show_with_resize("img contours", img, 450)
     return img
 
+def find_paper(large, margin_left=20, margin_right=20, margin_top=20, margin_down=20):
+    rgb = cv2.pyrDown(large)
+    small = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
 
-def process(img):
-    mask = find_lines_mask(img)
-    res = cv2.bitwise_and(img, img, mask=mask)
-    show_with_resize("res", res, 450)
-    marked_words = draw_word_rectangles(img, mask)
-    show_with_resize("marked_words", marked_words, 450)
-    cv2.waitKey(0)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    grad = cv2.morphologyEx(small, cv2.MORPH_GRADIENT, kernel)
+
+    _, bw = cv2.threshold(grad, 0.0, 255.0, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 1))
+    connected = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, kernel)
+    # cv2.imshow("asf", connected)
+    # cv2.waitKey(0)
+    # using RETR_EXTERNAL instead of RETR_CCOMP
+    _, contours, hierarchy = cv2.findContours(connected.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+    mask = np.zeros(bw.shape, dtype=np.uint8)
+    contour_sizes = [(cv2.contourArea(contour), contour) for contour in contours]
+    biggest_contour = max(contour_sizes, key=lambda x: x[0])[1]
+
+    x, y, w, h = cv2.boundingRect(biggest_contour)
+    mask[y:y+h, x:x+w] = 0
+    if w > 500 and h > 700:
+        cv2.rectangle(rgb, (x, y), (x+w-1, y+h-1), (0, 255, 0), 2)
+        min_y = y * 2 + margin_top
+        max_y = (y + h) * 2 - margin_down
+        min_x = x * 2 + margin_left
+        max_x = (x + w) * 2 - margin_right
+        # show_with_resize("rgb", rgb, 450)
+        # show_with_resize("large", large, 450)
+        large = large[min_y:max_y,min_x:max_x]
+
+    # cv2.imshow('rects', large)
+    # print(str(w) + " " + str(h))
+    # cv2.imwrite(batch + "-results/" + f_name, large)
+    return large
+
+def process(img, f_name):
+    img_paper = find_paper(img)
+    # show_with_resize("img_paper", img_paper, 450)
+    mask = find_lines_mask(img_paper)
+    res = cv2.bitwise_and(img_paper, img_paper, mask=mask)
+    # show_with_resize("res", res, 450)
+    marked_words = draw_word_rectangles(img_paper, mask)
+    # show_with_resize("marked_words", marked_words, 450)
+    cv2.imwrite("koncowe/" + f_name, marked_words)
+    # cv2.waitKey(0)
 
 
 def main(path):
@@ -94,7 +133,7 @@ def main(path):
         print(f_name)
         if f_name[-3:] == "jpg":
             img = cv2.imread(os.path.join(path, f_name))
-            process(img)
+            process(img, f_name)
 
         # print(os.path.exists())
 
@@ -102,4 +141,3 @@ def main(path):
 if __name__ == "__main__":
     path = os.path.join(".", "data")
     main(path)
-
