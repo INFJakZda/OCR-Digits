@@ -53,7 +53,7 @@ def find_lines_mask(img):
     lines_sum = np.sum(dilate, axis=1)
     lines_sum_mean = np.mean(lines_sum)
     lines_sum_med = np.median(lines_sum)
-    print("median: {}, mean: {}".format(lines_sum_mean, lines_sum_med))
+    # print("median: {}, mean: {}".format(lines_sum_mean, lines_sum_med))
     for i, line_sum in enumerate(lines_sum):
         line = dilate[i]
         line_mean = np.mean(line)
@@ -78,6 +78,34 @@ def draw_word_rectangles(img, mask):
             cv2.rectangle(img, (x, y), (x + w - 1, y + h - 1), (0, 255, 0), 2)
     # show_with_resize("img contours", img, 450)
     return img
+
+def detect_words(img, mask):
+    im2, contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    returned_mask = np.zeros_like(mask)
+    indexing_height = 0
+    index = 0
+    tolerance = 10  # TODO
+    for contour in reversed(contours):
+        x, y, w, h = cv2.boundingRect(contour)
+        if 75 < w < 500 and 30 < h < 100:
+            diference = (abs(indexing_height - (y + h / 2)))
+            print(diference)
+            if diference > tolerance:
+                index += 1    
+            indexing_height = (y + h / 2)
+            min_y = y
+            max_y = (y + h)
+            min_x = x 
+            max_x = (x + w)
+            # show_with_resize("large", large, 450)
+            returned_mask[min_y:max_y,min_x:max_x] = index * 10
+    # show_with_resize("img contours", img, 450)
+    print("INDEX")
+    print(index)
+    show_with_resize("img", img, 450)
+    show_with_resize("returned mask", returned_mask, 450)
+    cv2.waitKey(0)
+    return returned_mask
 
 def find_paper(large, margin_left=20, margin_right=20, margin_top=20, margin_down=20):
     rgb = cv2.pyrDown(large)
@@ -122,9 +150,9 @@ def process(img, f_name):
     mask = find_lines_mask(img_paper)
     res = cv2.bitwise_and(img_paper, img_paper, mask=mask)
     # show_with_resize("res", res, 450)
-    marked_words = draw_word_rectangles(img_paper, mask)
+    marked_words = detect_words(img_paper, mask)
     # show_with_resize("marked_words", marked_words, 450)
-    cv2.imwrite("koncowe/" + f_name, marked_words)
+    # cv2.imwrite("dupa/" + f_name, marked_words)
     # cv2.waitKey(0)
 
 
