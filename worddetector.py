@@ -5,6 +5,20 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
+
+def show_with_resize(winname, img, width=None):
+    try:
+        h, w, ch = img.shape
+    except ValueError:
+        h, w = img.shape
+    if width is not None:
+        ratio = h/w
+        resized_img = cv2.resize(img, (width, int(ratio * width)))
+        cv2.imshow(winname, resized_img)
+    else:
+        cv2.imshow(winname, img)
+
+
 def apply_sobel(gray):
     scale = 1
     delta = 0
@@ -47,6 +61,16 @@ def find_lines_mask(img):
 
     return dilate_mask
 
+
+def draw_word_rectangles(img, mask):
+    im2, contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        if 75 < w < 500 and 30 < h < 100:
+            cv2.rectangle(img, (x, y), (x + w - 1, y + h - 1), (0, 255, 0), 2)
+    show_with_resize("img contours", img, 450)
+    return img
+
 def detect_words_on_mask(img, mask):
     im2, contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     returned_mask = np.zeros_like(mask)
@@ -65,7 +89,45 @@ def detect_words_on_mask(img, mask):
             min_x = x 
             max_x = (x + w)
             returned_mask[min_y:max_y,min_x:max_x] = index * 10
+    # show_with_resize("img", img, 450)
+    # show_with_resize("returned mask", returned_mask, 450)
+    # cv2.waitKey(0)
     return returned_mask
+
+def show_with_resize_28(winname, img):
+    img = cv2.resize(img, (28,28), interpolation=cv2.INTER_CUBIC)
+    cv2.imshow(winname, img)
+
+def detect_index(img):
+    cv2.imshow("wycinek", img)
+
+    # show_with_resize_28("resized_28", img)
+    cv2.waitKey(0)
+
+def detect_indexes(img, mask):
+    im2, contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    indexing_height = 0
+    index = 0
+    go = False
+    min_x = 0
+    tolerance = 20  # TODO
+    for contour in reversed(contours):
+        x, y, w, h = cv2.boundingRect(contour)
+        if 75 < w < 500 and 30 < h < 100:
+            diference = (abs(indexing_height - (y + h / 2)))
+            if diference > tolerance:
+                index += 1
+                if(index > 1):
+                    detect_index(img[min_y:max_y,min_x:max_x])
+                    go = True
+            if (x > min_x or go):
+                go = False
+                min_y = y
+                max_y = (y + h)
+                min_x = x 
+                max_x = (x + w)
+            indexing_height = (y + h / 2)
+    return ('tu beda indexy XD')
 
 def find_paper(large, margin_left=20, margin_right=20, margin_top=20, margin_down=20):
     rgb = cv2.pyrDown(large)
@@ -114,5 +176,17 @@ def detect_words(f_name):
     _ = cv2.bitwise_and(img_paper, img_paper, mask=mask)
     
     marked_words = detect_words_on_mask(img_paper, mask)
+
+    return marked_words
+
+def ocr(f_name):
+    img = cv2.imread(f_name)
+
+    img_paper = find_paper(img)
     
+    mask = find_lines_mask(img_paper)
+    _ = cv2.bitwise_and(img_paper, img_paper, mask=mask)
+    
+    marked_words = detect_indexes(img_paper, mask)
+
     return marked_words
