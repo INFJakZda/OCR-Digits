@@ -5,6 +5,33 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.models import model_from_json
+import os
+import pandas as pd
+
+from scipy.misc import imshow, imsave, imread, imresize
+from scipy.ndimage import filters, morphology
+from skimage import filters
+from skimage.draw import line
+from scipy import ndimage, spatial
+
+# load json and create model
+json_file = open('model_digit_rec.json', 'r')
+loaded_model_json = json_file.read()
+json_file.close()
+loaded_model = model_from_json(loaded_model_json)
+# load weights into new model
+loaded_model.load_weights("model_digit_rec.h5")
+print("Loaded model from disk")
+
+# X_test = pd.read_csv('../data/test_train.csv')
+# X_test.describe()
+# X_test = X_test.values.reshape(X_test.shape[0],28,28,1)
+# y_pred = loaded_model.predict_classes(X_test, verbose=1)
+# print(y_pred)
+
 
 def show_with_resize(winname, img, width=None):
     try:
@@ -98,11 +125,126 @@ def show_with_resize_28(winname, img):
     img = cv2.resize(img, (28,28), interpolation=cv2.INTER_CUBIC)
     cv2.imshow(winname, img)
 
+def houghLines(img):
+    w,h = img.shape
+    acc=[]
+    for i in range(h):
+        rr,cc = line(0, i, w-1, h-i-1)
+        acc.append(np.sum(img[rr, cc]))
+    mi = np.argmax(acc)
+    ret = np.zeros(img.shape, dtype=np.bool)
+    rr,cc = line(0, mi, w-1, h-mi-1)
+    ret[rr,cc]=True
+    return ret
+
+def removeLines(img):
+    imggray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    imfft = np.fft.fft2(imggray)
+    imffts = np.fft.fftshift(imfft)
+
+    mags = np.abs(imffts)
+    angles = np.angle(imffts)
+
+    visual = np.log(mags)
+
+
+    visual3 = np.abs(visual.astype(np.int16) - np.mean(visual))
+
+    ret = houghLines(visual3)
+    ret = morphology.binary_dilation(ret )
+    ret = morphology.binary_dilation(ret )
+    ret = morphology.binary_dilation(ret )
+    ret = morphology.binary_dilation(ret )
+    ret = morphology.binary_dilation(ret )
+    w,h=ret.shape
+    ret[int(w/2-3):int(w/2+3), int(h/2-3):int(h/2+3)]=False
+
+
+    delta = np.mean(visual[ret]) - np.mean(visual)
+
+
+    visual_blured = ndimage.gaussian_filter(visual, sigma=5)
+
+
+
+    visual[ret] =visual_blured[ret]
+
+
+    newmagsshift = np.exp(visual)
+
+    newffts = newmagsshift * np.exp(1j*angles)
+
+    newfft = np.fft.ifftshift(newffts)
+
+    imrev = np.fft.ifft2(newfft)
+
+    newim2 =  np.abs(imrev).astype(np.uint8)
+
+
+    # newim2 = np.maximum(newim2, img)
+
+    return newim2, img
+
+def to_grey(img, name):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.bitwise_not(gray)
+    bw = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, \
+                                cv2.THRESH_BINARY, 15, -2)
+    # Show binary image
+    cv2.imshow("binary" + name, bw)
+
+def get_digits_from_index(img, mask, name):
+    im2, contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contour_sizes = [(cv2.contourArea(contour), contour) for contour in contours]
+    # sorted_contour = sorted(contour_sizes, key=lambda tup: tup[1])
+    sorted_contour = sorted(contours, key=lambda x: cv2.contourArea(x), reverse=True)
+    if len(sorted_contour) > 6:
+        sorted_contour = sorted_contour[:6]
+
+    boundingBoxes = [cv2.boundingRect(c) for c in sorted_contour]
+    (sorted_contour, boundingBoxes) = zip(*sorted(zip(sorted_contour, boundingBoxes),
+		key=lambda b:b[1][0], reverse=False))
+
+    digits = []
+    for idx, box in enumerate(boundingBoxes):
+        x, y, w, h = box
+        # cv2.rectangle(img, (x, y), (x + w - 1, y + h - 1), (0, 255, 0), 2)
+        min_y = y
+        max_y = (y + h)
+        min_x = x
+        max_x = (x + w)
+        
+        digit = mask[min_y:max_y,min_x:max_x]
+        # cv2.imshow(str(idx), digit)
+        digit = cv2.resize(digit, dsize=(28, 28))
+        digit = digit.reshape([1, 28, 28, 1])
+        prediction = loaded_model.predict_classes(digit)
+        digits.append(prediction[0])
+    print(digits)
+    cv2.imshow("img contours_final", img)
+    
+    return ''.join(str(e) for e in digits)
+
+def get_index(gray, name):
+    gray = cv2.bitwise_not(gray)
+    _, bw = cv2.threshold(gray,135,255,cv2.THRESH_BINARY)
+    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
+    cv2.imshow("binary" + name, bw)
+    return get_digits_from_index(gray, bw, "1")
+
+
 def detect_index(img):
     cv2.imshow("wycinek", img)
+    to_grey(img, "wyc")
+    
+    img2, img3 = removeLines(img)
 
-    # show_with_resize_28("resized_28", img)
+    cv2.imshow("wycinek2", img2)
+    index = get_index(img2, "wyc2")
+
     cv2.waitKey(0)
+    return index
 
 def detect_indexes(img, mask):
     im2, contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -111,6 +253,9 @@ def detect_indexes(img, mask):
     go = False
     min_x = 0
     tolerance = 20  # TODO
+
+    results_recogn_rows = []
+
     for contour in reversed(contours):
         x, y, w, h = cv2.boundingRect(contour)
         if 75 < w < 500 and 30 < h < 100:
@@ -118,7 +263,8 @@ def detect_indexes(img, mask):
             if diference > tolerance:
                 index += 1
                 if(index > 1):
-                    detect_index(img[min_y:max_y,min_x:max_x])
+                    index_rec = detect_index(img[min_y:max_y,min_x:max_x])
+                    results_recogn_rows.append(('', '', index_rec))
                     go = True
             if (x > min_x or go):
                 go = False
@@ -127,7 +273,7 @@ def detect_indexes(img, mask):
                 min_x = x 
                 max_x = (x + w)
             indexing_height = (y + h / 2)
-    return ('tu beda indexy XD')
+    return results_recogn_rows
 
 def find_paper(large, margin_left=20, margin_right=20, margin_top=20, margin_down=20):
     rgb = cv2.pyrDown(large)
@@ -187,6 +333,6 @@ def ocr(f_name):
     mask = find_lines_mask(img_paper)
     _ = cv2.bitwise_and(img_paper, img_paper, mask=mask)
     
-    marked_words = detect_indexes(img_paper, mask)
+    results_recogn_rows = detect_indexes(img_paper, mask)
 
-    return marked_words
+    return results_recogn_rows

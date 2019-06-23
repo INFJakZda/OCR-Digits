@@ -11,9 +11,9 @@ def main(path):
     for f_name in os.listdir(path):
         print(f_name)
         if f_name[-3:] == "jpg":
-            ocr(os.path.join(path, f_name))
+            result = ocr(os.path.join(path, f_name))
 
-        # print(os.path.exists())
+        print(result)
 
 
 if __name__ == "__main__":
